@@ -9,6 +9,8 @@ use hyper::Body;
 use serde_urlencoded;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use std::process::{Command, Stdio};
+use std::io::Write;
 use url::Url;
 
 use crate::dynamic_resources;
@@ -25,6 +27,7 @@ pub mod reserved_paths {
         pub const HELP: &'static str = "/help";
         pub const FAVICON_ICO: &'static str = "/favicon.ico";
         pub const ROBOTS_TXT: &'static str = "/robots.txt";
+	pub const CLIPBOARD: &'static str = "/clipboard.service";
     }
 }
 
@@ -224,6 +227,17 @@ impl PipingServer {
                     }
                 }
                 &Method::POST | &Method::PUT => {
+		    if path == reserved_paths::CLIPBOARD {
+			let body = hyper::body::to_bytes(req.into_body()).await.expect("failed to get content from peer");
+			let mut child = Command::new("xsel")
+			    .arg("-ib")
+			    .stdin(Stdio::piped()).spawn().expect("failed to create child process");
+			// Stdinに流し込む
+			child.stdin.take().expect("failed to open stdin of xsel")
+			    .write_all(&body).expect("failed to write to stdin of xsel");
+			return;
+		    }
+
                     if reserved_paths::VALUES.contains(&path) {
                         // Reject reserved path sending
                         let res = Response::builder()
